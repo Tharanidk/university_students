@@ -1,0 +1,9 @@
+[package]
+org = "tharanikarunathilaka"
+name = "student_sftp_sync_1"
+version = "0.1.0"
+distribution = "2201.13.1"
+title = "student_sftp_sync_1"
+
+[build-options]
+sticky = true
