@@ -1,2 +1,0 @@
-[workspace]
-packages = ["university_student_sync", "student_sftp_sync_1"]
