@@ -2,7 +2,6 @@ import ballerina/log;
 import ballerina/data.csv;
 import ballerina/sql;
 import ballerina/email;
-import ballerina/io;
 import ballerina/time;
 import ballerina/ftp;
 
@@ -116,7 +115,6 @@ function processFile(byte[] csvBytes, string startTime) returns error? {
 
     string reportText = generateReport(report);
     //log:printInfo(reportText);
-    check writeReportToFile(reportText);
     check sendEmailNotification(reportText);
 }
 
@@ -231,10 +229,6 @@ function generateReport(ProcessingReport r) returns string {
 ====================================================`;
 }
 
-function writeReportToFile(string report) returns error? {
-    check io:fileWriteString("./output/processing_report.txt", report);
-    log:printInfo("Report saved to ./output/processing_report.txt");
-}
 
 function sendEmailNotification(string report) returns error? {
     if !enableEmail {
