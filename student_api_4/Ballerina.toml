@@ -1,0 +1,8 @@
+[package]
+org = "epflpoc"
+name = "student_api_4"
+version = "0.1.0"
+title = "student_api_4"
+
+[build-options]
+sticky = true
