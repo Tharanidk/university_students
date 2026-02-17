@@ -1,0 +1,9 @@
+[package]
+org = "epflpoc"
+name = "student_perf_test_8"
+version = "0.1.0"
+distribution = "2201.13.1"
+title = "student_perf_test_8"
+
+[build-options]
+sticky = true
