@@ -1,0 +1,9 @@
+[package]
+org = "epflpoc"
+name = "sftp_test_with_listner"
+version = "0.1.0"
+distribution = "2201.13.1"
+title = "sftp_test_with_listner"
+
+[build-options]
+sticky = true
