@@ -16,6 +16,9 @@ type StudentCsv record {|
     string actif;
 |};
 
+// Aliases used by CSV join utilities.
+type csvRecord StudentCsv;
+
 type UpsertResult record {|
     int insertions;
     int updates;
@@ -44,3 +47,5 @@ type BirthDateCsv record {|
     string actif;
 |};
 
+// Aliases used by CSV join utilities.
+type csvRecordDN BirthDateCsv;

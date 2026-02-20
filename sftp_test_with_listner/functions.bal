@@ -118,8 +118,26 @@ function processFile(byte[] csvBytes, string startTime) returns error? {
     check sendEmailNotification(reportText);
 }
 
+type BirthDateUpdateStats record {|
+    int updated;
+    int skipped;
+    int errors;
+|};
+
 function processBirthDateFile(byte[] csvBytes) returns error? {
-    // Add column if not exists
+    check ensureDateOfBirthColumn();
+
+    csvRecordDN[] recordsDN = check parseBirthDateCsv(csvBytes);
+    csvRecord[] studentCsvRecords = check loadStudentCsvRecords();
+    csvRecordDN[] joinedRecords = joinCsvRecordAndCsvRecordDN(studentCsvRecords, recordsDN);
+    log:printInfo(string `Joined ${joinedRecords.length()} records by id`);
+
+    int unmatchedCount = recordsDN.length() - joinedRecords.length();
+    BirthDateUpdateStats stats = check applyBirthDateUpdates(joinedRecords, unmatchedCount);
+    log:printInfo(string `Birth dates: ${stats.updated} updated, ${stats.skipped} skipped, ${stats.errors} errors`);
+}
+
+function ensureDateOfBirthColumn() returns error? {
     do {
         _ = check mysqlClient->execute(
             `ALTER TABLE students ADD COLUMN date_of_birth DATE AFTER email`
@@ -132,25 +150,46 @@ function processBirthDateFile(byte[] csvBytes) returns error? {
             return e;
         }
     }
+}
 
+function parseBirthDateCsv(byte[] csvBytes) returns csvRecordDN[]|error {
     byte[] content = csvBytes;
     if csvBytes.length() >= 3 && csvBytes[0] == 0xEF && csvBytes[1] == 0xBB && csvBytes[2] == 0xBF {
         content = csvBytes.slice(3);
     }
 
     string csvString = check string:fromBytes(content);
-    BirthDateCsv[] records = check csv:parseString(csvString, {delimiter: ";"});
-    log:printInfo(string `Parsed ${records.length()} birth date records`);
+    csvRecordDN[] recordsDN = check csv:parseString(csvString, {delimiter: ";"});
+    log:printInfo(string `Parsed ${recordsDN.length()} birth date records`);
+    return recordsDN;
+}
 
-    int updated = 0;
-    int skipped = 0;
-    int errors = 0;
+function loadStudentCsvRecords() returns csvRecord[]|error {
+    stream<record {|int id; string last_name; string first_name; string email; int active;|}, sql:Error?> studentRs =
+        mysqlClient->query(`SELECT id, last_name, first_name, email, active FROM students`);
 
-    foreach BirthDateCsv rec in records {
+    return check from var row in studentRs
+        select {
+            id: row.id,
+            nom: row.last_name,
+            prenom: row.first_name,
+            email: row.email,
+            actif: row.active == 1 ? "1" : "0"
+        };
+}
+
+function applyBirthDateUpdates(csvRecordDN[] joinedRecords, int unmatchedCount) returns BirthDateUpdateStats|error {
+    BirthDateUpdateStats stats = {
+        updated: 0,
+        skipped: unmatchedCount,
+        errors: 0
+    };
+
+    foreach csvRecordDN rec in joinedRecords {
         do {
             string dateStr = rec.datenaissance.trim();
             if dateStr.length() == 0 {
-                skipped += 1;
+                stats.skipped += 1;
                 log:printWarn(string `Student ${rec.id}: No birth date — skipping`);
                 continue;
             }
@@ -160,20 +199,45 @@ function processBirthDateFile(byte[] csvBytes) returns error? {
                 `UPDATE students SET date_of_birth = ${formattedDate} WHERE id = ${rec.id}`
             );
 
-            int? affected = result.affectedRowCount;
-            if affected is int && affected > 0 {
-                updated += 1;
+            int affected = result.affectedRowCount ?: 0;
+            if affected > 0 {
+                stats.updated += 1;
                 log:printInfo(string `Birth date updated: ${rec.id} -> ${formattedDate}`);
             } else {
+                stats.skipped += 1;
                 log:printWarn(string `Student ${rec.id} not found in database`);
             }
         } on fail error e {
-            errors += 1;
+            stats.errors += 1;
             log:printError(string `Error: Student ${rec.id} — ${e.message()}`);
         }
     }
 
-    log:printInfo(string `Birth dates: ${updated} updated, ${skipped} skipped, ${errors} errors`);
+    return stats;
+}
+
+// In-memory inner join of student and birth-date CSV rows by `id`.
+function joinCsvRecordAndCsvRecordDN(csvRecord[] csvRecords, csvRecordDN[] csvRecordsDN) returns csvRecordDN[] {
+    map<csvRecord> recordsById = {};
+    foreach csvRecord rec in csvRecords {
+        recordsById[rec.id.toString()] = rec;
+    }
+
+    csvRecordDN[] joined = [];
+    foreach csvRecordDN recDN in csvRecordsDN {
+        csvRecord? rec = recordsById[recDN.id.toString()];
+        if rec is csvRecord {
+            joined.push({
+                id: recDN.id,
+                nom: rec.nom,
+                prenom: rec.prenom,
+                email: rec.email,
+                datenaissance: recDN.datenaissance,
+                actif: rec.actif
+            });
+        }
+    }
+    return joined;
 }
 
 function convertDateFormat(string dateStr) returns string|error {
