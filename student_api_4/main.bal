@@ -22,16 +22,18 @@ service /api on new http:Listener(8080) {
 
      resource function get students(string? status) returns json|http:InternalServerError {
         do {
-            sql:ParameterizedQuery query;
+            sql:ParameterizedQuery q = `SELECT * FROM students`;
+            sql:ParameterizedQuery filterClause = ``;
+
             if status is string && status.equalsIgnoreCaseAscii("active") {
-                query = `SELECT * FROM students WHERE active = 1`;
+                filterClause = ` WHERE active = 1`;
             } else if status is string && status.equalsIgnoreCaseAscii("inactive") {
-                query = `SELECT * FROM students WHERE active = 0`;
-            } else {
-                query = `SELECT * FROM students`;
+                filterClause = ` WHERE active = 0`;
             }
 
-            stream<record {}, sql:Error?> rs = mysqlClient->query(query);
+            sql:ParameterizedQuery finalQ = sql:queryConcat(q, filterClause);
+
+            stream<record {}, sql:Error?> rs = mysqlClient->query(finalQ);
             record {}[] students = check from var row in rs select row;
              return students.toJson();
         } on fail error e {
@@ -55,4 +57,3 @@ service /api on new http:Listener(8080) {
         }
     }
 }
-
